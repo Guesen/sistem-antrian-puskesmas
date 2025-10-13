@@ -54,9 +54,8 @@ fn try_windows_usb_printers(data: &[u8]) -> Result<String, String> {
     use winapi::um::winspool::{
         ClosePrinter, EnumPrintersA, OpenPrinterA, StartDocPrinterA, 
         EndDocPrinter, StartPagePrinter, EndPagePrinter, WritePrinter,
-        PRINTER_ENUM_LOCAL, PRINTER_INFO_2A
+        PRINTER_ENUM_LOCAL, PRINTER_INFO_2A, DOC_INFO_1A
     };
-    use winapi::um::wingdi::DOC_INFO_1A;
     use winapi::shared::minwindef::DWORD;
     
     // Common thermal printer names to try
@@ -144,9 +143,8 @@ fn print_to_windows_printer(printer_name: &str, data: &[u8]) -> Result<(), Strin
     use std::ptr;
     use winapi::um::winspool::{
         ClosePrinter, OpenPrinterA, StartDocPrinterA, EndDocPrinter,
-        StartPagePrinter, EndPagePrinter, WritePrinter
+        StartPagePrinter, EndPagePrinter, WritePrinter, DOC_INFO_1A
     };
-    use winapi::um::wingdi::DOC_INFO_1A;
     
     unsafe {
         let printer_cstr = CString::new(printer_name).map_err(|e| e.to_string())?;
