@@ -30,7 +30,32 @@ export default function QueueButton({
           patient_type: subtitle,
         });
         console.log("Queue created successfully:", queueData);
-        onQueueGenerated(queueData);
+
+        // Try to print to thermal printer
+        try {
+          console.log("Attempting to print to thermal printer...");
+          const printResult = await tauriAPI.printThermalTicket({
+            queue_code: queueData.queue_code,
+            loket_type: queueData.loket_type,
+            patient_type: queueData.patient_type,
+            created_at: new Date(queueData.created_at).toLocaleString("id-ID", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            }),
+          });
+          console.log("Thermal print success:", printResult);
+          
+          // Show modal without auto-print since we already printed to thermal
+          onQueueGenerated(queueData);
+        } catch (printError) {
+          console.warn("Thermal printer not available, falling back to dialog print:", printError);
+          // Fallback: show modal with auto-print dialog
+          onQueueGenerated(queueData);
+        }
       } else {
         console.log("Not in Tauri environment, using mock data");
         // Fallback for development - get next queue number from localStorage

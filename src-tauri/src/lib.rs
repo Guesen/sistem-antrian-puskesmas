@@ -1,6 +1,8 @@
 mod database;
+mod printer;
 
 use database::{Queue, CreateQueueRequest, QueueCounts, init_database, get_queue_counts, create_queue, clean_old_queues};
+use printer::print_thermal_ticket;
 use tauri::{State, Manager};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -73,7 +75,7 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![get_current_queues, create_new_queue])
+    .invoke_handler(tauri::generate_handler![get_current_queues, create_new_queue, print_thermal_ticket])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

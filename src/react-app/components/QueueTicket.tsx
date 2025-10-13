@@ -34,16 +34,22 @@ export default function QueueTicket({ queueData, onClose }: QueueTicketProps) {
   };
 
   useEffect(() => {
-    // Auto print after a short delay
-    const timer = setTimeout(() => {
-      try {
-        console.log("Auto printing...");
-        window.print();
-      } catch (error) {
-        console.error("Auto print error:", error);
-      }
-    }, 2000); // Increased delay to 2 seconds for better reliability
-    return () => clearTimeout(timer);
+    // Only auto-print if NOT in Tauri environment (thermal printer fallback)
+    // In Tauri, thermal printer already printed in QueueButton
+    if (!(window as any).__TAURI__) {
+      console.log("Not in Tauri, using browser print dialog");
+      const timer = setTimeout(() => {
+        try {
+          console.log("Auto printing...");
+          window.print();
+        } catch (error) {
+          console.error("Auto print error:", error);
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else {
+      console.log("In Tauri environment, thermal printer already handled");
+    }
   }, []);
 
   return (

@@ -21,6 +21,13 @@ export interface CreateQueueRequest {
   patient_type: string;
 }
 
+export interface PrintTicketRequest {
+  queue_code: string;
+  loket_type: string;
+  patient_type: string;
+  created_at: string;
+}
+
 // Tauri API functions
 export const tauriAPI = {
   // Get current queue counts
@@ -45,7 +52,18 @@ export const tauriAPI = {
     }
   },
 
-  // Print ticket using browser's print function
+  // Print ticket to thermal printer
+  async printThermalTicket(request: PrintTicketRequest): Promise<string> {
+    try {
+      const result = await invoke<string>("print_thermal_ticket", { request });
+      return result;
+    } catch (error) {
+      console.error("Error printing to thermal printer:", error);
+      throw error;
+    }
+  },
+
+  // Print ticket using browser's print function (fallback)
   async printTicket(): Promise<void> {
     try {
       // Use browser's print function
