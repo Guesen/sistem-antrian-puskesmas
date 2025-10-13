@@ -3,7 +3,7 @@ mod printer;
 
 use database::{Queue, CreateQueueRequest, QueueCounts, init_database, get_queue_counts, create_queue, clean_old_queues};
 use printer::print_thermal_ticket;
-use tauri::{State, Manager};
+use tauri::State;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 

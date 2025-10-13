@@ -13,10 +13,29 @@ pub struct PrintTicketRequest {
 pub async fn print_thermal_ticket(request: PrintTicketRequest) -> Result<String, String> {
     log::info!("Attempting to print thermal ticket: {}", request.queue_code);
     
-    // Try to find and print to thermal printer
+    // Generate ESC/POS data
+    let print_data = generate_escpos_data(&request);
+    
+    // Try Windows USB printer first (for USB-001, etc.)
+    #[cfg(target_os = "windows")]
+    {
+        log::info!("Trying Windows USB printer...");
+        match try_windows_usb_printers(&print_data) {
+            Ok(printer_name) => {
+                log::info!("Successfully printed to Windows printer: {}", printer_name);
+                return Ok(format!("Berhasil mencetak ke {}", printer_name));
+            }
+            Err(e) => {
+                log::warn!("Windows USB printer not available: {}", e);
+            }
+        }
+    }
+    
+    // Fallback to serial port scan (for COM ports)
+    log::info!("Trying serial ports...");
     match find_and_print_thermal(&request) {
         Ok(_) => {
-            log::info!("Successfully printed to thermal printer");
+            log::info!("Successfully printed to serial thermal printer");
             Ok("Berhasil mencetak ke printer thermal".to_string())
         }
         Err(e) => {
@@ -25,6 +44,228 @@ pub async fn print_thermal_ticket(request: PrintTicketRequest) -> Result<String,
             Err(format!("Printer thermal tidak ditemukan: {}. Gunakan print dialog.", e))
         }
     }
+}
+
+// Windows-specific USB printer support
+#[cfg(target_os = "windows")]
+fn try_windows_usb_printers(data: &[u8]) -> Result<String, String> {
+    use std::ffi::CString;
+    use std::ptr;
+    use winapi::um::winspool::{
+        ClosePrinter, EnumPrintersA, OpenPrinterA, StartDocPrinterA, 
+        EndDocPrinter, StartPagePrinter, EndPagePrinter, WritePrinter,
+        PRINTER_ENUM_LOCAL, PRINTER_INFO_2A
+    };
+    use winapi::um::wingdi::DOC_INFO_1A;
+    use winapi::shared::minwindef::DWORD;
+    
+    // Common thermal printer names to try
+    let printer_names = vec![
+        "USB-001",
+        "USB001", 
+        "USB-002",
+        "USB002",
+        "POS-80",
+        "TP860",
+        "Thermal Printer",
+        "XP-80C",
+        "ZJ-80",
+    ];
+    
+    // Try each printer name
+    for printer_name in &printer_names {
+        log::info!("Trying printer: {}", printer_name);
+        match print_to_windows_printer(printer_name, data) {
+            Ok(_) => return Ok(printer_name.to_string()),
+            Err(e) => {
+                log::debug!("Failed to print to {}: {}", printer_name, e);
+                continue;
+            }
+        }
+    }
+    
+    // If none of the common names worked, try to enumerate all printers
+    log::info!("Trying to enumerate all local printers...");
+    unsafe {
+        let mut needed: DWORD = 0;
+        let mut returned: DWORD = 0;
+        
+        // First call to get buffer size
+        EnumPrintersA(
+            PRINTER_ENUM_LOCAL,
+            ptr::null_mut(),
+            2,
+            ptr::null_mut(),
+            0,
+            &mut needed,
+            &mut returned,
+        );
+        
+        if needed > 0 {
+            let mut buffer: Vec<u8> = vec![0; needed as usize];
+            
+            // Second call to get actual data
+            if EnumPrintersA(
+                PRINTER_ENUM_LOCAL,
+                ptr::null_mut(),
+                2,
+                buffer.as_mut_ptr(),
+                needed,
+                &mut needed,
+                &mut returned,
+            ) != 0 {
+                let printers = buffer.as_ptr() as *const PRINTER_INFO_2A;
+                
+                for i in 0..returned {
+                    let printer = printers.offset(i as isize);
+                    if !(*printer).pPrinterName.is_null() {
+                        let name = std::ffi::CStr::from_ptr((*printer).pPrinterName)
+                            .to_string_lossy()
+                            .to_string();
+                        
+                        log::info!("Found printer: {}", name);
+                        
+                        // Try to print to this printer
+                        if let Ok(_) = print_to_windows_printer(&name, data) {
+                            return Ok(name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Err("No Windows USB printer found".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn print_to_windows_printer(printer_name: &str, data: &[u8]) -> Result<(), String> {
+    use std::ffi::CString;
+    use std::ptr;
+    use winapi::um::winspool::{
+        ClosePrinter, OpenPrinterA, StartDocPrinterA, EndDocPrinter,
+        StartPagePrinter, EndPagePrinter, WritePrinter
+    };
+    use winapi::um::wingdi::DOC_INFO_1A;
+    
+    unsafe {
+        let printer_cstr = CString::new(printer_name).map_err(|e| e.to_string())?;
+        let mut printer_handle = ptr::null_mut();
+        
+        // Open printer
+        if OpenPrinterA(
+            printer_cstr.as_ptr() as *mut i8,
+            &mut printer_handle,
+            ptr::null_mut()
+        ) == 0 {
+            return Err(format!("Failed to open printer: {}", printer_name));
+        }
+        
+        // Start document
+        let doc_name = CString::new("Antrian Ticket").unwrap();
+        let mut doc_info = DOC_INFO_1A {
+            pDocName: doc_name.as_ptr() as *mut i8,
+            pOutputFile: ptr::null_mut(),
+            pDatatype: ptr::null_mut(),
+        };
+        
+        if StartDocPrinterA(printer_handle, 1, &mut doc_info as *mut _ as *mut u8) == 0 {
+            ClosePrinter(printer_handle);
+            return Err("Failed to start document".to_string());
+        }
+        
+        // Start page
+        if StartPagePrinter(printer_handle) == 0 {
+            EndDocPrinter(printer_handle);
+            ClosePrinter(printer_handle);
+            return Err("Failed to start page".to_string());
+        }
+        
+        // Write data
+        let mut bytes_written = 0u32;
+        if WritePrinter(
+            printer_handle,
+            data.as_ptr() as *mut _,
+            data.len() as u32,
+            &mut bytes_written,
+        ) == 0 {
+            EndPagePrinter(printer_handle);
+            EndDocPrinter(printer_handle);
+            ClosePrinter(printer_handle);
+            return Err("Failed to write to printer".to_string());
+        }
+        
+        // End page and document
+        EndPagePrinter(printer_handle);
+        EndDocPrinter(printer_handle);
+        ClosePrinter(printer_handle);
+        
+        log::info!("Successfully wrote {} bytes to {}", bytes_written, printer_name);
+    }
+    
+    Ok(())
+}
+
+fn generate_escpos_data(request: &PrintTicketRequest) -> Vec<u8> {
+    let mut data = Vec::new();
+    
+    // ESC/POS commands
+    let esc = 0x1B;
+    let gs = 0x1D;
+    
+    // Initialize printer
+    data.extend_from_slice(&[esc, b'@']);
+    
+    // Set alignment to center
+    data.extend_from_slice(&[esc, b'a', 1]);
+    
+    // Set text size to double (width and height)
+    data.extend_from_slice(&[gs, b'!', 0x11]);
+    
+    // Print header
+    data.extend_from_slice(b"PUSKESMAS MREBET\n");
+    
+    // Reset text size
+    data.extend_from_slice(&[gs, b'!', 0x00]);
+    
+    data.extend_from_slice(b"Nomor Antrian\n\n");
+    
+    // Set text size to triple for queue number
+    data.extend_from_slice(&[gs, b'!', 0x22]);
+    
+    // Print queue code (large)
+    data.extend_from_slice(request.queue_code.as_bytes());
+    data.extend_from_slice(b"\n\n");
+    
+    // Reset text size
+    data.extend_from_slice(&[gs, b'!', 0x00]);
+    
+    // Set alignment to left
+    data.extend_from_slice(&[esc, b'a', 0]);
+    
+    // Print details
+    let loket_line = format!("Loket: {}\n", request.loket_type);
+    data.extend_from_slice(loket_line.as_bytes());
+    
+    let patient_line = format!("Jenis: {}\n", request.patient_type);
+    data.extend_from_slice(patient_line.as_bytes());
+    
+    let time_line = format!("Waktu: {}\n\n", request.created_at);
+    data.extend_from_slice(time_line.as_bytes());
+    
+    // Set alignment to center
+    data.extend_from_slice(&[esc, b'a', 1]);
+    
+    data.extend_from_slice(b"Terima Kasih\n");
+    data.extend_from_slice(b"Harap Menunggu\n\n\n");
+    
+    // Feed paper
+    data.extend_from_slice(&[esc, b'd', 3]);
+    
+    // Cut paper (full cut)
+    data.extend_from_slice(&[gs, b'V', 0]);
+    
+    data
 }
 
 fn find_and_print_thermal(request: &PrintTicketRequest) -> Result<(), String> {
@@ -81,80 +322,10 @@ fn print_to_port(port_name: &str, request: &PrintTicketRequest) -> Result<(), St
         .open()
         .map_err(|e| format!("Gagal membuka port: {}", e))?;
     
-    // ESC/POS commands
-    let esc = 0x1B;
-    let gs = 0x1D;
-    
-    // Initialize printer
-    port.write_all(&[esc, b'@'])
-        .map_err(|e| format!("Gagal initialize printer: {}", e))?;
-    
-    // Set alignment to center
-    port.write_all(&[esc, b'a', 1])
-        .map_err(|e| format!("Gagal set alignment: {}", e))?;
-    
-    // Set text size to double (width and height)
-    port.write_all(&[gs, b'!', 0x11])
-        .map_err(|e| format!("Gagal set text size: {}", e))?;
-    
-    // Print header
-    port.write_all(b"PUSKESMAS MREBET\n")
-        .map_err(|e| format!("Gagal print header: {}", e))?;
-    
-    // Reset text size
-    port.write_all(&[gs, b'!', 0x00])
-        .map_err(|e| format!("Gagal reset text size: {}", e))?;
-    
-    port.write_all(b"Nomor Antrian\n\n")
-        .map_err(|e| format!("Gagal print subtitle: {}", e))?;
-    
-    // Set text size to triple for queue number
-    port.write_all(&[gs, b'!', 0x22])
-        .map_err(|e| format!("Gagal set large text: {}", e))?;
-    
-    // Print queue code (large)
-    port.write_all(request.queue_code.as_bytes())
-        .map_err(|e| format!("Gagal print queue code: {}", e))?;
-    port.write_all(b"\n\n")
-        .map_err(|e| format!("Gagal print newline: {}", e))?;
-    
-    // Reset text size
-    port.write_all(&[gs, b'!', 0x00])
-        .map_err(|e| format!("Gagal reset text size: {}", e))?;
-    
-    // Set alignment to left
-    port.write_all(&[esc, b'a', 0])
-        .map_err(|e| format!("Gagal set left alignment: {}", e))?;
-    
-    // Print details
-    let loket_line = format!("Loket: {}\n", request.loket_type);
-    port.write_all(loket_line.as_bytes())
-        .map_err(|e| format!("Gagal print loket: {}", e))?;
-    
-    let patient_line = format!("Jenis: {}\n", request.patient_type);
-    port.write_all(patient_line.as_bytes())
-        .map_err(|e| format!("Gagal print patient type: {}", e))?;
-    
-    let time_line = format!("Waktu: {}\n\n", request.created_at);
-    port.write_all(time_line.as_bytes())
-        .map_err(|e| format!("Gagal print time: {}", e))?;
-    
-    // Set alignment to center
-    port.write_all(&[esc, b'a', 1])
-        .map_err(|e| format!("Gagal set center alignment: {}", e))?;
-    
-    port.write_all(b"Terima Kasih\n")
-        .map_err(|e| format!("Gagal print thank you: {}", e))?;
-    port.write_all(b"Harap Menunggu\n\n\n")
-        .map_err(|e| format!("Gagal print wait message: {}", e))?;
-    
-    // Feed paper
-    port.write_all(&[esc, b'd', 3])
-        .map_err(|e| format!("Gagal feed paper: {}", e))?;
-    
-    // Cut paper (full cut)
-    port.write_all(&[gs, b'V', 0])
-        .map_err(|e| format!("Gagal cut paper: {}", e))?;
+    // Generate and send ESC/POS data
+    let data = generate_escpos_data(request);
+    port.write_all(&data)
+        .map_err(|e| format!("Gagal menulis ke port: {}", e))?;
     
     // Flush to ensure all data is sent
     port.flush()
@@ -162,4 +333,3 @@ fn print_to_port(port_name: &str, request: &PrintTicketRequest) -> Result<(), St
     
     Ok(())
 }
-
