@@ -65,6 +65,7 @@ fn try_windows_usb_printers(data: &[u8]) -> Result<String, String> {
         "USB-002",
         "USB002",
         "POS-80",
+        "TP806",
         "TP860",
         "Thermal Printer",
         "XP-80C",
