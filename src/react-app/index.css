@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+/* Print styles for thermal printer TP806 */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 2mm 4mm;
+  }
+  
+  body {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.2;
+    width: 72mm;
+    max-width: 72mm;
+    color: black !important;
+  }
+  
+  * {
+    -webkit-print-color-adjust: exact;
+    color-adjust: exact;
+    color: black !important;
+    background: white !important;
+  }
+  
+  .print\:hidden {
+    display: none !important;
+  }
+  
+  .print\:bg-white {
+    background-color: white !important;
+  }
+  
+  .print\:text-black {
+    color: black !important;
+  }
+  
+  .print\:text-gray-800 {
+    color: black !important;
+  }
+  
+  .print\:static {
+    position: static !important;
+  }
+  
+  .print\:inset-auto {
+    inset: auto !important;
+  }
+  
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+  
+  .print\:rounded-none {
+    border-radius: 0 !important;
+  }
+  
+  .print\:max-w-none {
+    max-width: none !important;
+  }
+  
+  .print\:mx-0 {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  
+  .print\:border-solid {
+    border-style: solid !important;
+  }
+  
+  .print\:border-gray-800 {
+    border-color: #1f2937 !important;
+  }
+  
+  .print\:font-mono {
+    font-family: 'Courier New', monospace !important;
+  }
+  
+  .print\:w-full {
+    width: 100% !important;
+  }
+  
+  .print\:max-w-none {
+    max-width: none !important;
+  }
+  
+  .print\:text-xs {
+    font-size: 10px !important;
+  }
+  
+  .print\:text-sm {
+    font-size: 12px !important;
+  }
+  
+  .print\:text-6xl {
+    font-size: 48px !important;
+  }
+  
+  .print\:font-bold {
+    font-weight: bold !important;
+  }
+  
+  .print\:font-black {
+    font-weight: 900 !important;
+  }
+  
+  .print\:font-semibold {
+    font-weight: 600 !important;
+  }
+  
+  .print\:p-2 {
+    padding: 8px !important;
+  }
+  
+  .print\:pb-4 {
+    padding-bottom: 16px !important;
+  }
+  
+  .print\:mb-2 {
+    margin-bottom: 8px !important;
+  }
+  
+  .print\:mb-3 {
+    margin-bottom: 12px !important;
+  }
+  
+  .print\:my-2 {
+    margin-top: 8px !important;
+    margin-bottom: 8px !important;
+  }
+  
+  .print\:space-y-1 > * + * {
+    margin-top: 4px !important;
+  }
+  
+  .print\:leading-tight {
+    line-height: 1.1 !important;
+  }
+  
+  .print\:border-t {
+    border-top-width: 1px !important;
+  }
+}

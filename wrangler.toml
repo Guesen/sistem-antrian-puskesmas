@@ -1,0 +1,18 @@
+name = "sistem-antrian-puskesmas"
+main = "src/worker/index.ts"
+compatibility_date = "2024-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sistem-antrian-dev"
+database_id = "your-database-id-here"
+
+[vars]
+ENVIRONMENT = "development"
+
+# Uncomment untuk production
+# [env.production]
+# [[env.production.d1_databases]]
+# binding = "DB" 
+# database_name = "sistem-antrian-prod"
+# database_id = "your-prod-database-id"
