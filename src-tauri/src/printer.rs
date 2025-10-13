@@ -218,51 +218,54 @@ fn generate_escpos_data(request: &PrintTicketRequest) -> Vec<u8> {
     // Set alignment to center
     data.extend_from_slice(&[esc, b'a', 1]);
     
-    // Set text size to double (width and height)
-    data.extend_from_slice(&[gs, b'!', 0x11]);
-    
-    // Print header
+    // Print header - PUSKESMAS MREBET
+    data.extend_from_slice(&[gs, b'!', 0x11]); // Double size
     data.extend_from_slice(b"PUSKESMAS MREBET\n");
     
-    // Reset text size
-    data.extend_from_slice(&[gs, b'!', 0x00]);
+    // Print sub-header - KAB. PURBALINGGA
+    data.extend_from_slice(&[gs, b'!', 0x00]); // Normal size
+    data.extend_from_slice(b"KAB. PURBALINGGA\n");
     
-    data.extend_from_slice(b"Nomor Antrian\n\n");
+    // Separator line
+    data.extend_from_slice(b"------------------------\n");
     
-    // Set text size to triple for queue number
-    data.extend_from_slice(&[gs, b'!', 0x22]);
+    // Print "NOMOR ANTRIAN" label
+    data.extend_from_slice(&[gs, b'!', 0x01]); // Double height
+    data.extend_from_slice(b"NOMOR ANTRIAN\n\n");
     
-    // Print queue code (large)
+    // Print queue code - VERY LARGE
+    data.extend_from_slice(&[gs, b'!', 0x77]); // Maximum size (8x width, 8x height)
     data.extend_from_slice(request.queue_code.as_bytes());
     data.extend_from_slice(b"\n\n");
     
-    // Reset text size
+    // Reset text size and set alignment to left
     data.extend_from_slice(&[gs, b'!', 0x00]);
-    
-    // Set alignment to left
     data.extend_from_slice(&[esc, b'a', 0]);
     
-    // Print details
-    let loket_line = format!("Loket: {}\n", request.loket_type);
-    data.extend_from_slice(loket_line.as_bytes());
+    // Print loket and patient type
+    let loket_patient = format!("Loket {} - {}\n", request.loket_type, request.patient_type);
+    data.extend_from_slice(loket_patient.as_bytes());
     
-    let patient_line = format!("Jenis: {}\n", request.patient_type);
-    data.extend_from_slice(patient_line.as_bytes());
+    // Separator line
+    data.extend_from_slice(b"------------------------\n");
     
-    let time_line = format!("Waktu: {}\n\n", request.created_at);
-    data.extend_from_slice(time_line.as_bytes());
-    
-    // Set alignment to center
+    // Set alignment to center for footer
     data.extend_from_slice(&[esc, b'a', 1]);
     
-    data.extend_from_slice(b"Terima Kasih\n");
-    data.extend_from_slice(b"Harap Menunggu\n\n\n");
+    // Print footer message
+    data.extend_from_slice(b"Terima kasih atas kunjungan\n");
+    data.extend_from_slice(b"Anda.\n");
+    data.extend_from_slice(b"Jaga selalu kesehatan Anda dan\n");
+    data.extend_from_slice(b"keluarga.\n\n");
     
-    // Feed paper
-    data.extend_from_slice(&[esc, b'd', 3]);
+    // Print timestamp
+    data.extend_from_slice(&[gs, b'!', 0x00]); // Small text
+    data.extend_from_slice(request.created_at.as_bytes());
+    data.extend_from_slice(b"\n\n");
     
-    // Cut paper (full cut)
-    data.extend_from_slice(&[gs, b'V', 0]);
+    // Feed paper and cut
+    data.extend_from_slice(&[esc, b'd', 3]); // Feed 3 lines
+    data.extend_from_slice(&[gs, b'V', 66, 0]); // Partial cut
     
     data
 }

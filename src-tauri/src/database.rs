@@ -1,5 +1,6 @@
 use sqlx::{sqlite::SqlitePool, Row};
 use serde::{Deserialize, Serialize};
+use chrono::FixedOffset;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Queue {
@@ -52,8 +53,14 @@ pub async fn init_database() -> Result<SqlitePool, sqlx::Error> {
     Ok(pool)
 }
 
+// Helper function to get Indonesia time (WIB = UTC+7)
+fn indonesia_now() -> chrono::DateTime<FixedOffset> {
+    let offset = FixedOffset::east_opt(7 * 3600).unwrap();
+    chrono::Utc::now().with_timezone(&offset)
+}
+
 pub async fn get_queue_counts(pool: &SqlitePool) -> Result<QueueCounts, sqlx::Error> {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = indonesia_now().format("%Y-%m-%d").to_string();
     
     let loket_a: i32 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM queues WHERE loket_type = 'A' AND DATE(created_at) = ?"
@@ -78,7 +85,7 @@ pub async fn get_queue_counts(pool: &SqlitePool) -> Result<QueueCounts, sqlx::Er
 }
 
 pub async fn create_queue(pool: &SqlitePool, request: CreateQueueRequest) -> Result<Queue, sqlx::Error> {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = indonesia_now().format("%Y-%m-%d").to_string();
     
     // Get next queue number for the loket
     let count: i32 = sqlx::query_scalar(
@@ -93,7 +100,7 @@ pub async fn create_queue(pool: &SqlitePool, request: CreateQueueRequest) -> Res
     let next_number = count + 1;
     let queue_code = format!("{}{:03}", request.loket_type, next_number);
     
-    let now = chrono::Utc::now();
+    let now = indonesia_now();
     let created_at = now.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
     
     // Insert new queue
@@ -135,7 +142,7 @@ pub async fn create_queue(pool: &SqlitePool, request: CreateQueueRequest) -> Res
 }
 
 pub async fn clean_old_queues(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    let seven_days_ago = chrono::Utc::now() - chrono::Duration::days(7);
+    let seven_days_ago = indonesia_now() - chrono::Duration::days(7);
     let cutoff_date = seven_days_ago.format("%Y-%m-%d").to_string();
     
     sqlx::query("DELETE FROM queues WHERE DATE(created_at) < ?")
